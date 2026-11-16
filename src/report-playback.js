@@ -1,5 +1,7 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ReportPlayback=api;})(typeof globalThis!=='undefined'?globalThis:this,()=>{
   'use strict';
+  const {REPORT_METRICS_VERSION,wordMatches} = typeof module==='object'&&module.exports
+    ? require('../shared/report-selection') : globalThis.ReportSelection;
   function clock(seconds){
     if(!Number.isFinite(seconds)||seconds<0)return '—';
     const total=Math.floor(seconds),pad=value=>String(value).padStart(2,'0');
@@ -12,7 +14,7 @@
       transcript=get('playback-segments'),backward=get('playback-backward'),forward=get('playback-forward'),
       followControls=get('playback-follow-controls'),followSwitch=get('playback-follow'),returnButton=get('playback-return'),
       scrollRegion=get('report-scroll'),materials=get('report-materials');
-    let record=null,recordKey=null,segments=null,selectedId=null,currentId=null,playError='',lastVolume=1,scrubbing=false,following=true;
+    let record=null,recordKey=null,segments=null,fullText='',matchMap=null,selectedId=null,currentId=null,playError='',lastVolume=1,scrubbing=false,following=true;
     let rangeEnd=null,playRequest=0;
     const rows=new Map(),available=()=>Boolean(record?.audioUrl&&!['missing','corrupt'].includes(record.audioState));
     audio.controls=false;audio.hidden=true;
@@ -134,15 +136,37 @@
     function setRecord(next){
       const key=`${next?.id||''}:${next?.audioUrl||''}`,changed=key!==recordKey;
       if(changed){clearRange();playError='';scrubbing=false;if(record?.id!==next?.id)following=true;recordKey=key;currentId=null;selectedId=null;}
-      const rebuild=changed||segments!==next?.segments;record=next;
+      const nextText=next?.fullText||'',metricRun=next?.structuredReport?.metricRun?.value;
+      const map=metricRun?.localStatsSnapshot?.wordMatchMap;
+      const nextMap=metricRun?.definitionVersion===REPORT_METRICS_VERSION &&
+        metricRun.metrics.some(metric=>metric.id==='review-word-count'&&metric.status==='available') &&
+        typeof map==='string'&&map.length<=nextText.length&&!/[^ 1-7-]|(?:^| )-/.test(map) ? map : null;
+      const rebuild=changed||segments!==next?.segments||fullText!==nextText||matchMap!==nextMap;record=next;
       if(rebuild){
-        segments=next?.segments;rows.clear();transcript.replaceChildren();
+        segments=next?.segments;fullText=nextText;matchMap=nextMap;rows.clear();transcript.replaceChildren();
+        // Offsets refer to the full transcript, so only project them onto slices of that exact text.
+        const aligned=!segments?.length||segments.map(segment=>segment.text).join('')===fullText;
+        const matches=wordMatches(aligned ? matchMap??'' : '');
+        let hit=matches.next().value,offset=0;
+        function renderSlice(node,text){
+          const end=offset+text.length,local=[];
+          while(hit && hit.start<end){
+            if(hit.end>offset)local.push({start:Math.max(hit.start-offset,0),end:Math.min(hit.end,end)-offset,kinds:hit.kinds});
+            if(hit.end>end)break;
+            hit=matches.next().value;
+          }
+          renderText(node,text,local);
+          offset=end;
+        }
         for(const segment of segments||[]){
           const root=node('div','playback-segment'),button=node('button','playback-segment-button'),time=node('span','playback-segment-time',clock(Number.isFinite(segment.startMs)?segment.startMs/1000:NaN)),text=node('span','playback-segment-text'),position=node('span','playback-position');
-          root.dataset.segmentId=segment.id;button.type='button';button.setAttribute('aria-label',`查看${Number.isFinite(segment.startMs)?clock(segment.startMs/1000)+'开始的':''}片段`);renderText(text,segment.text||'');button.append(time,text,position);root.append(button);transcript.append(root);rows.set(segment.id,{root,button,position});
+          root.dataset.segmentId=segment.id;button.type='button';button.setAttribute('aria-label',`查看${Number.isFinite(segment.startMs)?clock(segment.startMs/1000)+'开始的':''}片段`);renderSlice(text,segment.text||'');button.append(time,text,position);root.append(button);transcript.append(root);rows.set(segment.id,{root,button,position});
           button.addEventListener('click',()=>{selectSegment(segment.id);onSelect?.(segment.id);});
         }
-        if(!rows.size&&next?.fullText)transcript.append(node('p','playback-plain-transcript',next.fullText));
+        if(!rows.size&&fullText){
+          const text=node('p','playback-plain-transcript');
+          renderSlice(text,fullText);transcript.append(text);
+        }
         selectedId=rows.has(selectedId)?selectedId:(rows.keys().next().value||null);
       }
       syncMedia();updateRows();

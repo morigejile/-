@@ -72,7 +72,7 @@ test('highlight tokens preserve hostile markup as text while classifying Chinese
   assert.equal(tokens.map(token => token.text).join(''), input);
 });
 
-test('highlight renderer creates only controlled spans and text nodes', () => {
+test('highlight renderer creates only controlled marks and text nodes', () => {
   const document = new FakeDocument();
   const container = document.createElement('div');
   const input = '<script>evil()</script><img src=x onerror=evil()>这个很好可能';
@@ -81,9 +81,20 @@ test('highlight renderer creates only controlled spans and text nodes', () => {
 
   assert.equal(container.textContent, input);
   assert.deepEqual(elementSnapshot(container), [
-    { tagName: 'SPAN', className: 'filler' },
-    { tagName: 'SPAN', className: 'vague' },
-    { tagName: 'SPAN', className: 'hedge' }
+    { tagName: 'MARK', className: 'filler' },
+    { tagName: 'MARK', className: 'vague' },
+    { tagName: 'MARK', className: 'hedge' }
+  ]);
+});
+
+test('subtitle matching keeps a whole longer hesitation and recognizes existing connector entries', () => {
+  assert.deepEqual(tokenizeHighlightedText('然后我觉得这个计划很好。'), [
+    {type:'filler',text:'然后'},
+    {type:'hedge',text:'我觉得'},
+    {type:'filler',text:'这个'},
+    {type:'text',text:'计划'},
+    {type:'vague',text:'很好'},
+    {type:'text',text:'。'}
   ]);
 });
 

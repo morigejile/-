@@ -188,7 +188,7 @@ Zipformer Small/Large 在 ASR utility 内处理端点和录音收尾的 `final` 
 
 ### 5.5 Lexicon / `lib/lexicon.js`
 
-`lib/lexicon.js` 读取情绪词并输出填充词、犹豫词、笼统词、情绪词、密度和建议；录音模式逐句调用 `analyze-text`；粘贴入口、`analyzeTexts` Preload API 和 `analyze-texts` Main handler 已移除。Renderer 高亮与 Main 统计共用 `shared/expression-rules.js`；自定义词经去重、长度和 64 项上限后参与本地分析与 prompt。未接入运行时的词库不放在活跃 `data/` 目录。
+`lib/lexicon.js` 读取情绪词并输出填充词、犹豫词、笼统词、情绪词、密度和建议；录音模式逐句调用 `analyze-text`；粘贴入口、`analyzeTexts` Preload API 和 `analyze-texts` Main handler 已移除。录音字幕高亮与 Main 统计共用 `shared/expression-rules.js` 的内置词表；报告逐字稿由 `src/report-playback.js` 将报告绑定的 `wordMatchMap` 投影到保存片段，与用词证据使用同一份快照。自定义词经去重、长度和 64 项上限后参与本地分析与 prompt。未接入运行时的词库不放在活跃 `data/` 目录。
 
 ### 5.6 LLM / `lib/ai-feedback.js`、`lib/structured-diagnosis.js`
 

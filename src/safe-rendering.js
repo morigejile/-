@@ -13,68 +13,55 @@
   'use strict';
 
   if (!rules) throw new Error('Expression rules are required');
-  const VAGUE_WORDS = Object.keys(rules.VAGUE_TO_PRECISE);
+  const categories = [['filler','填充词'],['hedge','犹豫词'],['vague','笼统词']];
+  const wordKinds = new Map();
+  [rules.FILLER_WORDS,rules.HEDGE_WORDS,Object.keys(rules.VAGUE_TO_PRECISE)].forEach((words,index)=>{
+    for (const word of words) wordKinds.set(word,(wordKinds.get(word)||0)|(1<<index));
+  });
 
   function escapeRegExp(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  function wordPattern(words) {
-    return new RegExp([...words].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|'), 'g');
-  }
+  const wordPattern = new RegExp([...wordKinds.keys()].sort((a,b)=>b.length-a.length).map(escapeRegExp).join('|'),'g');
 
-  function markTextTokens(tokens, pattern, type) {
-    const result = [];
-
-    for (const token of tokens) {
-      if (token.type !== 'text') {
-        result.push(token);
-        continue;
-      }
-
-      let cursor = 0;
-      pattern.lastIndex = 0;
-      for (const match of token.text.matchAll(pattern)) {
-        if (match.index > cursor) {
-          result.push({ type: 'text', text: token.text.slice(cursor, match.index) });
-        }
-        result.push({ type, text: match[0] });
-        cursor = match.index + match[0].length;
-      }
-      if (cursor < token.text.length) {
-        result.push({ type: 'text', text: token.text.slice(cursor) });
-      }
+  function* matchSubtitleWords(text) {
+    for (const match of text.matchAll(wordPattern)) {
+      yield {start:match.index,end:match.index+match[0].length,kinds:wordKinds.get(match[0])};
     }
-
-    return result;
   }
 
-  function tokenizeHighlightedText(text) {
+  function tokenizeHighlightedText(text,matches) {
     const input = String(text ?? '');
-    const vaguePattern = wordPattern(VAGUE_WORDS);
-    const fillerPattern = wordPattern(rules.FILLER_WORDS);
-    const hedgePattern = wordPattern(rules.HEDGE_WORDS);
-    let tokens = [{ type: 'text', text: input }];
-    tokens = markTextTokens(tokens, vaguePattern, 'vague');
-    tokens = markTextTokens(tokens, fillerPattern, 'filler');
-    tokens = markTextTokens(tokens, hedgePattern, 'hedge');
+    const tokens = [];
+    let cursor = 0;
+    for (const {start,end,kinds} of matches ?? matchSubtitleWords(input)) {
+      if (start > cursor) tokens.push({type:'text',text:input.slice(cursor,start)});
+      const types = categories.filter((_,index)=>kinds & (1<<index)).map(([type])=>type);
+      tokens.push({type:types.length===1?types[0]:'multiple',text:input.slice(start,end),
+        ...(types.length>1?{kinds}:{})});
+      cursor = end;
+    }
+    if (cursor < input.length) tokens.push({type:'text',text:input.slice(cursor)});
     return tokens;
   }
 
-  function renderHighlightedText(container, text) {
+  function renderHighlightedText(container, text, matches) {
     const document = container.ownerDocument;
     container.replaceChildren();
 
-    for (const token of tokenizeHighlightedText(text)) {
+    for (const token of tokenizeHighlightedText(text,matches)) {
       if (token.type === 'text') {
         container.appendChild(document.createTextNode(token.text));
         continue;
       }
 
-      const span = document.createElement('span');
-      span.className = token.type;
-      span.appendChild(document.createTextNode(token.text));
-      container.appendChild(span);
+      const mark = document.createElement('mark');
+      mark.className = token.type;
+      const labels = categories.filter(([type],index)=>token.kinds ? token.kinds & (1<<index) : token.type===type);
+      mark.title = labels.map(([,label])=>label).join('、')+' · 词表命中，需结合语境判断';
+      mark.appendChild(document.createTextNode(token.text));
+      container.appendChild(mark);
     }
   }
 

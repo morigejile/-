@@ -1327,6 +1327,7 @@ class ExpressionTrainer {
     const expanded=this.renderedReportId===record.id ? [...(this.reportBody.querySelectorAll?.('details[data-finding-id][open]') || [])].map(node=>node.getAttribute('data-finding-id')) : [];
     this.renderedReportId=record.id;
     this.renderedReportSnapshotId=snapshotId;this.renderedReportNavigation=this.navigationGeneration;
+    if(this.viewingTrainingRecordId===record.id)this.reportPlayback?.setRecord(record);
     this.reportCleanup?.();this.reportCleanup = null;
     if (record.structuredReport) {
       this.reportCleanup = StructuredReport.renderStructuredReport(this.reportBody,record.structuredReport,{segments:record.segments,record,api:window.api,
@@ -1364,7 +1365,6 @@ class ExpressionTrainer {
     }
     if (ref.startsWith('metric:')) {
       const target=document.getElementById(ref);
-      if (target?.tagName==='DETAILS') target.open=true;
       target?.scrollIntoView({block:'center',behavior:'smooth'});
       return;
     }

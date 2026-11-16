@@ -54,39 +54,45 @@
       if(metric.status!=='available' || !Number.isFinite(metric.value))item.appendChild(node('p','metric-reason',reasonText(metric.reason)));
       return item;
     }
-    function evidenceList(title,entries,render) {
-      const details=node('details','metric-evidence-list');
-      details.appendChild(node('summary',null,title));
-      const list=node('ol');
-      const more=node('button','text-action','显示更多');more.type='button';
-      let next;
+    function evidenceList(title,listClass,entries,render) {
+      const section=node('section','metric-evidence-list');
+      const list=node('ul',listClass);
+      list.setAttribute('role','list');
+      const more=node('button','text-action',`显示更多${title}`);more.type='button';
+      let next=entries.next();
       function appendPage() {
-        next ??= entries.next();
+        let firstItem;
         for (let i=0;i<50 && !next.done;i++) {
           const item=node('li');
           render(item,next.value);
           list.appendChild(item);
+          firstItem ??= item;
           next=entries.next();
         }
         more.hidden=next.done;
+        return firstItem;
       }
-      details.addEventListener('toggle',()=>{
-        if (details.open && !next) appendPage();
+      appendPage();
+      more.addEventListener('click',()=>{
+        const firstItem=appendPage();
+        if (!firstItem) return;
+        firstItem.tabIndex=-1;
+        firstItem.focus();
       });
-      more.addEventListener('click',appendPage);
-      details.append(list,more);
-      return details;
+      section.append(node('h3',null,title),list,more);
+      return section;
     }
     const basics=node('dl','metric-basics');
     for(const id of BASIC_METRICS)if(byId.has(id))basics.appendChild(row(byId.get(id)));
     const reviewWords=byId.get('review-word-count');
     if(revised && reviewWords)basics.appendChild(row(reviewWords));
     root.appendChild(basics);
+    let wordEvidence;
     if (revised) {
       const map=metricRun.value.localStatsSnapshot?.wordMatchMap;
       const fullText=record.fullText || (record.segments || []).map(segment=>segment.text).join('');
       if (reviewWords?.status==='available' && reviewWords.value>0 && typeof map==='string' && map.length<=fullText.length) {
-        const hits=evidenceList('查看命中用词与原文',wordMatches(map),(item,{start,end,kinds})=>{
+        wordEvidence=evidenceList('用词命中','metric-word-list',wordMatches(map),(item,{start,end,kinds})=>{
           const context=node('span','metric-word-context');
           const before=fullText.slice(Math.max(0,start-14),start),after=fullText.slice(end,end+14);
           const labels=['填充词','犹豫词','笼统词'].filter((_,index)=>kinds & (1<<index));
@@ -94,14 +100,12 @@
             node('span',null,after+(end+14<fullText.length?'…':'')));
           item.append(context,node('small','metric-word-category',labels.join('、')));
         });
-        hits.id='metric:filler-count';
-        root.appendChild(hits);
       } else {
-        const note=node('p','metric-count-note',reviewWords?.status==='available'
-          ? '本次没有待核查的词表命中。' : reasonText(reviewWords?.reason));
-        note.id='metric:filler-count';
-        root.appendChild(note);
+        wordEvidence=node('section','metric-evidence-list');
+        wordEvidence.append(node('h3',null,'用词命中'),node('p','metric-count-note',reviewWords?.status==='available'
+          ? '本次没有待核查的词表命中。' : reasonText(reviewWords?.reason)));
       }
+      wordEvidence.id='metric:filler-count';
     } else {
       const counts=node('dl','word-statistics');counts.setAttribute('aria-label','词语命中次数');
       for(const [id,label,key] of COUNT_METRICS){
@@ -112,32 +116,38 @@
     }
     if(evidenceRun && evidenceRun.value?.status!=='completed')root.appendChild(node('p','metric-availability',`语音区间暂不可用：${reasonText(evidenceRun.value?.reason)}。词语统计仍可查看。`));
     const more=node('section','metric-details');more.id='report-more-metrics';more.appendChild(node('h3',null,'更多指标'));
-    const groups=node('div','metric-groups');
-    const layouts=revised ? [
-      ['用词',[['hedge-character-percent','犹豫词字符占比']],
-        '同一处命中多个类别只计一处，可结合原文判断。'],
-      ['语速与停顿',[['speech-duration-ms','检测语音时长'],['between-speech-gap-count','内部间隔次数'],
-        ['text-rate-per-speech-minute','每检测语音分钟字符数'],['between-speech-gap-percent','内部间隔占比'],
-        ['between-speech-gap-rate-per-expression-minute','每表达分钟内部间隔次数']],
-        '表达跨度从第一段检测语音开始到最后一段结束。停顿统计只计语音区间之间的间隔。']
-    ] : [
-      ['词语与速率',[
-        ['text-rate-per-recorded-minute','录音平均字数'],['filler-rate-per-recorded-minute','填充词频率'],
-        ['hedge-character-percent','犹豫词字符占比'],['non-filler-hedge-character-percent','剩余字符占比']],
-        '录音速率含静音；剩余字符占比排除填充词与犹豫词，不是质量评分。'],
-      ['语音区间 · 模型估计',[
-        ['speech-duration-ms','语音时长'],['non-speech-duration-ms','非语音时长'],['between-speech-gap-count','区间间隔'],
-        ['between-speech-gap-total-ms','间隔合计'],['between-speech-gap-max-ms','最长间隔'],['text-rate-per-speech-minute','语音分钟字数']],
-        '仅供核对，不能单凭数值判断语速或停顿是否合适。']];
-    for(const [title,entries,note] of layouts){
-      const selected=entries.filter(([id])=>byId.has(id));if(!selected.length)continue;
-      const group=node('section','metric-group'),list=node('dl','metric-list');group.appendChild(node('h4',null,title));
-      for(const [id,label] of selected)list.appendChild(row(byId.get(id),label));
-      group.append(list,node('p','metric-group-note',note));groups.appendChild(group);
+    if (revised) {
+      const list=node('dl','metric-grid');
+      const entries=[['hedge-character-percent','犹豫词字符占比'],['speech-duration-ms','检测语音时长'],
+        ['text-rate-per-speech-minute','每检测语音分钟字符数'],['between-speech-gap-count','内部间隔次数'],
+        ['between-speech-gap-percent','内部间隔占比'],['between-speech-gap-rate-per-expression-minute','每表达分钟内部间隔次数']];
+      for (const [id,label] of entries) if (byId.has(id)) list.appendChild(row(byId.get(id),label));
+      more.hidden=!list.children.length;
+      more.appendChild(list);
+    } else {
+      const groups=node('div','metric-groups');
+      const layouts=[
+        ['词语与速率',[
+          ['text-rate-per-recorded-minute','录音平均字数'],['filler-rate-per-recorded-minute','填充词频率'],
+          ['hedge-character-percent','犹豫词字符占比'],['non-filler-hedge-character-percent','剩余字符占比']],
+          '录音速率含静音；剩余字符占比排除填充词与犹豫词，不是质量评分。'],
+        ['语音区间 · 模型估计',[
+          ['speech-duration-ms','语音时长'],['non-speech-duration-ms','非语音时长'],['between-speech-gap-count','区间间隔'],
+          ['between-speech-gap-total-ms','间隔合计'],['between-speech-gap-max-ms','最长间隔'],['text-rate-per-speech-minute','语音分钟字数']],
+          '仅供核对，不能单凭数值判断语速或停顿是否合适。']];
+      for(const [title,entries,note] of layouts){
+        const selected=entries.filter(([id])=>byId.has(id));if(!selected.length)continue;
+        const group=node('section','metric-group'),list=node('dl','metric-list');group.appendChild(node('h4',null,title));
+        for(const [id,label] of selected)list.appendChild(row(byId.get(id),label));
+        group.append(list,node('p','metric-group-note',note));groups.appendChild(group);
+      }
+      const extra=metrics.filter(metric=>!rendered.has(metric.id));
+      if(extra.length){const group=node('section','metric-group'),list=node('dl','metric-list');group.appendChild(node('h4',null,'其他已保存指标'));for(const metric of extra)list.appendChild(row(metric));group.appendChild(list);groups.appendChild(group);}
+      more.hidden=!groups.children.length;
+      more.appendChild(groups);
     }
-    const extra=revised?[]:metrics.filter(metric=>!rendered.has(metric.id));
-    if(extra.length){const group=node('section','metric-group'),list=node('dl','metric-list');group.appendChild(node('h4',null,'其他已保存指标'));for(const metric of extra)list.appendChild(row(metric));group.appendChild(list);groups.appendChild(group);}
-    more.appendChild(groups);more.hidden=!groups.children.length;root.appendChild(more);
+    root.appendChild(more);
+    if (wordEvidence) root.appendChild(wordEvidence);
     const speechSegments=evidenceRun?.value.segments || [];
     const gapCount=byId.get('between-speech-gap-count');
     if (revised && gapCount?.status==='available' && gapCount.value>0 && evidenceRun?.value.status==='completed') {
@@ -149,27 +159,29 @@
       }
       const canPlay=Boolean(onGap && record.audioUrl && !['missing','corrupt'].includes(record.audioState));
       const seconds=samples=>(samples/16000).toFixed(3).replace(/\.?0+$/,'');
-      const details=evidenceList('查看内部间隔',gaps(),(item,gap)=>{
+      const gapEvidence=evidenceList('内部间隔','metric-gap-list',gaps(),(item,gap)=>{
         const {startSample,endSample}=gap;
-        const label=`${seconds(startSample)}–${seconds(endSample)} 秒（${seconds(endSample-startSample)} 秒）`;
-        item.appendChild(node('span',null,label));
+        const range=`${seconds(startSample)}–${seconds(endSample)} 秒`;
+        const duration=`${seconds(endSample-startSample)} 秒`;
+        item.append(node('span','metric-gap-range',range),node('span','metric-gap-duration',`时长 ${duration}`));
         if (canPlay) {
           const button=node('button','text-action','回放');button.type='button';
-          button.setAttribute('aria-label',`回放 ${label}的前后录音`);
+          button.setAttribute('aria-label',`回放 ${range}（${duration}）的前后录音`);
           button.addEventListener('click',()=>onGap(gap));
           item.appendChild(button);
         }
       });
-      root.appendChild(details);
-      if (!canPlay) details.appendChild(node('p','metric-count-note','录音暂不可回放。'));
+      root.appendChild(gapEvidence);
+      if (!canPlay) gapEvidence.appendChild(node('p','metric-count-note','录音暂不可回放。'));
     }
     const source=node('section','metric-source-details');source.id='report-metric-source';source.appendChild(node('h3',null,'分析说明'));
     const explanations=node('dl','metric-source-list');
     const asr=record.sourceSnapshot?.asr;
     const explanationsByVersion=revised ? [
-      ['待核查用词','词表命中包括填充词、犹豫词和笼统词。正常用词也可能命中，需结合原文判断。'],
+      ['待核查用词','词表命中包括填充词、犹豫词和笼统词，同一处命中多个类别只计一处。正常用词也可能命中，需结合原文判断。'],
       ['转写字符数','只计文字和数字，排除标点和空白。'],
-      ['语音估计','短停顿可能合并。语音分钟字符数用转写字数除以检测语音时长。间隔占比和每分钟次数按表达跨度计算。']
+      ['语音估计','语音分钟字符数按检测语音时长计算。内部间隔只计相邻语音区间之间的停顿，短停顿可能合并。'],
+      ['表达跨度','从第一段检测语音开始到最后一段结束。内部间隔占比和每分钟次数以这段时间为基准。']
     ] : [
       ['词语命中','沿用本次保存的词表统计。正常用词也可能命中，次数不等于问题数量。未提供的指标显示为“暂不可用”，不记作 0。'],
       ['字数与速率','字数只计文字和数字，不含标点、空白。录音平均字数与填充词频率按整段录音时长计算，包含静音。'],

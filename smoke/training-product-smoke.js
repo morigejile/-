@@ -145,6 +145,29 @@ async function run({app, mainWindow, BrowserWindow, phase}) {
     if (phase === 'write' && prompt?.topic) await capture('preparing-context');
     await evaluate(`document.getElementById('btn-start').click()`);
     await wait('normal renderer captures and feeds audio', `window.__trainingProductTrainer.isRecording && window.__trainingProductTrainer.audioFeedTracker?.queue.snapshot().completed===1`);
+    if(phase==='offline'){
+      const subtitleMarks=await evaluate(`(()=>{
+        const trainer=window.__trainingProductTrainer,container=trainer.subtitleContainer;
+        const original=[...container.childNodes],old=original.map(node=>node.classList?.contains('old'));
+        try{
+          trainer.renderSubtitle('然后我觉得很好。',true,true);
+          const confirmed=container.lastElementChild;
+          trainer.renderSubtitle('然后可能',false);
+          const partial=container.querySelector('.interim-line');
+          const marks=[...confirmed.querySelectorAll('mark')];
+          const result={confirmed:marks.map(node=>node.textContent),sameColor:marks.every(node=>getComputedStyle(node).color===getComputedStyle(confirmed).color),
+            bold:marks.every(node=>Number(getComputedStyle(node).fontWeight)>Number(getComputedStyle(confirmed).fontWeight)),
+            partial:partial.textContent,partialHits:partial.querySelectorAll('mark').length};
+          trainer.renderSubtitle('呃，我觉得可以。',true);
+          result.final=[...container.lastElementChild.querySelectorAll('mark')].map(node=>node.textContent);
+          return result;
+        }finally{
+          container.replaceChildren(...original);
+          original.forEach((node,index)=>node.classList?.toggle('old',old[index]));
+        }
+      })()`);
+      assert.deepEqual(subtitleMarks,{confirmed:['然后','我觉得','很好'],sameColor:true,bold:true,partial:'然后可能',partialHits:0,final:['呃','我觉得']});
+    }
     assert.equal(await evaluate(`document.getElementById('training-topic').disabled`),true);
     assert.equal(await evaluate(`document.getElementById('training-scenario').disabled`),true);
     assert.equal(await evaluate(`document.getElementById('training-framework').disabled`),true);
@@ -394,6 +417,7 @@ async function run({app, mainWindow, BrowserWindow, phase}) {
       const local=before.value.results.find(result=>result.kind==='common-analysis');
       assert.equal(local.definitionVersion,'common-metrics-v2');
       assert.equal(typeof local.value.localStatsSnapshot.wordMatchMap,'string');
+      await wait('saved report projection ready for playback checks',`Boolean(window.__trainingProductTrainer.trainingRecords.selected()?.structuredReport?.metricRun)`);
       assert.equal(await evaluate(`document.querySelectorAll('#report-summary-metrics > div, #report-analysis-info .metric-item').length`),9);
       await require('./report-playback-smoke').run({mainWindow,evaluate,wait,click,capture});
       assert.deepEqual(await invoke('getTrainingSession',{requestId:'before-playback-layout',sessionId:ids.at(-1)}),before,'playback presentation never rewrites saved facts');

@@ -75,7 +75,7 @@ body[data-frozen-ui="training"] #btn-start:hover{transform:none;box-shadow:inset
 body[data-frozen-ui="training"] #recording-stage .subtitle-scroll{width:100%;max-height:100%;overflow:auto;padding:32px 36px 24px;margin:0;min-height:0}
 body[data-frozen-ui="training"] .subtitle-line{font-size:24px;font-weight:300;line-height:1.7;letter-spacing:.025em;color:#918a7b;margin:0 0 8px;overflow-wrap:anywhere}
 body[data-frozen-ui="training"] .subtitle-line:not(.old),body[data-frozen-ui="training"] .interim-line{color:#393831}
-body[data-frozen-ui="training"] .subtitle-line :is(.filler,.hedge,.vague,.strong){color:inherit;background:none}
+:is(#recording-stage,#report-transcript,#report-information .metric-word-context) mark{color:inherit;background:none;font-weight:650}
 #sound-bars i{display:block;width:2px;flex:0 0 2px;height:3px;border-radius:1px;background:#8d7654;animation:none!important;transform:none!important}
 #transport-actions .icon{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 #transport-actions #btn-pause .icon{stroke-width:3.6}
@@ -260,24 +260,43 @@ html[data-theme]:is([data-theme="coral-glow"],[data-theme="ink-night"],[data-the
 body[data-frozen-ui="report"] #report-information .report-metrics :is(section>h3,.metric-evidence-list>summary){color:var(--accent)}
 /* Match the disclosure accent despite the dark theme's global heading color. */
 html[data-theme="ink-night"] body[data-frozen-ui="report"] #report-information .report-metrics>section>h3{color:var(--accent)!important}
-body[data-frozen-ui="report"] #report-information .report-metrics{padding:8px 0 0;color:var(--ink)}
+body[data-frozen-ui="report"] #report-information .report-metrics{color:var(--ink)}
 body[data-frozen-ui="report"] #report-information .word-statistics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;max-width:550px;margin:0 0 10px}
 body[data-frozen-ui="report"] #report-information .word-statistics>.metric-item{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 14px;align-items:baseline}
 body[data-frozen-ui="report"] #report-information .word-statistics dt{font-size:13px;line-height:1.8;font-weight:400}
 body[data-frozen-ui="report"] #report-information .word-statistics dd{margin:0;font-size:17px;line-height:1.6;font-weight:400;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-body[data-frozen-ui="report"] #report-information .metric-count-note{margin:0 0 16px;font-size:12px;line-height:1.75;color:var(--muted)}
-body[data-frozen-ui="report"] #report-information .metric-evidence-list{padding:8px 0 12px;font-size:13px}
-body[data-frozen-ui="report"] #report-information .metric-evidence-list>summary{cursor:pointer}
-body[data-frozen-ui="report"] #report-information .metric-evidence-list ol{margin:8px 0;padding-inline-start:24px}
-body[data-frozen-ui="report"] #report-information .metric-evidence-list li{margin-block:4px;line-height:1.65;overflow-wrap:anywhere}
-body[data-frozen-ui="report"] #report-information .metric-evidence-list button{margin-inline-start:8px;color:var(--accent)}
+body[data-frozen-ui="report"] #report-information .metric-count-note{margin:0 0 12px;font-size:12px;line-height:1.75;color:var(--muted)}
+body[data-frozen-ui="report"] #report-information .metric-evidence-list .metric-count-note{margin:0}
+body[data-frozen-ui="report"] #report-information .metric-evidence-list ul{margin:0;padding:0;list-style:none}
+body[data-frozen-ui="report"] #report-information .metric-evidence-list li{
+  display:grid;align-items:baseline;gap:4px 14px;padding:7px 0;border-bottom:1px solid var(--line);
+  font-size:13px;line-height:1.7;overflow-wrap:anywhere;
+}
+body[data-frozen-ui="report"] #report-information .metric-evidence-list li:first-child{border-top:1px solid var(--line)}
+body[data-frozen-ui="report"] #report-information .metric-word-list li{grid-template-columns:minmax(0,1fr) minmax(5em,auto)}
 body[data-frozen-ui="report"] #report-information .metric-word-context{white-space:pre-wrap}
-body[data-frozen-ui="report"] #report-information .metric-word-context mark{background:transparent;color:inherit;font-weight:650;text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:.2em}
-body[data-frozen-ui="report"] #report-information .metric-word-category{margin-inline-start:8px;color:var(--muted)}
-body[data-frozen-ui="report"] #report-information :is(.metric-details,.metric-source-details){margin:0;padding:0;border-top:1px solid var(--line)}
-body[data-frozen-ui="report"] #report-information :is(.metric-details,.metric-source-details)>h3{margin:16px 0 12px;font-size:12px;line-height:1.6;font-weight:400;color:var(--muted)}
-body[data-frozen-ui="report"] #report-information .metric-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;padding:4px 0 18px}
-body[data-frozen-ui="report"] #report-information .metric-group{min-width:0}
+body[data-frozen-ui="report"] #report-information .metric-word-category{
+  justify-self:end;padding:1px 7px;border-radius:5px;background:var(--hover);color:var(--muted);font-size:11px;
+}
+body[data-frozen-ui="report"] #report-information .metric-gap-list li{grid-template-columns:minmax(0,1fr) minmax(8em,1fr) 4em;align-items:center;padding-block:4px;font-variant-numeric:tabular-nums}
+body[data-frozen-ui="report"] #report-information .metric-gap-duration{color:var(--muted);font-size:12px}
+body[data-frozen-ui="report"] #report-information .metric-evidence-list .text-action{
+  border:0;border-radius:5px;background:transparent;color:var(--accent);padding:4px 8px;min-height:28px;font-size:12px;
+}
+body[data-frozen-ui="report"] #report-information .metric-evidence-list .text-action:hover{background:var(--hover)}
+body[data-frozen-ui="report"] #report-information .metric-evidence-list>.text-action{margin-top:8px}
+body[data-frozen-ui="report"] #report-information .metric-gap-list + .text-action + .metric-count-note{margin-top:8px}
+body[data-frozen-ui="report"] #report-information :is(.metric-details,.metric-evidence-list,.metric-source-details){margin:0 0 22px}
+body[data-frozen-ui="report"] #report-information .metric-source-details{margin-bottom:0}
+body[data-frozen-ui="report"] #report-information .report-metrics h3{margin:0 0 9px;font-size:14px;line-height:1.6;font-weight:600;color:var(--ink)}
+body[data-frozen-ui="report"] #report-information .metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px;margin:0}
+body[data-frozen-ui="report"] #report-information .metric-grid>.metric-item{min-width:0;overflow-wrap:anywhere}
+body[data-frozen-ui="report"] #report-information .metric-grid dt{font-size:10px;font-weight:350;line-height:1.8;letter-spacing:.4px;color:var(--muted)}
+body[data-frozen-ui="report"] #report-information .metric-grid dd{margin:3px 0 0;font-size:21px;font-weight:300;line-height:1.8;letter-spacing:-.03em;color:var(--ink);font-variant-numeric:tabular-nums}
+html[data-theme="graphite"] body[data-frozen-ui="report"] #report-information .metric-grid dd{color:#7d6f56}
+html[data-theme="ink-night"] body[data-frozen-ui="report"] #report-information .metric-grid dt{color:var(--muted)!important}
+body[data-frozen-ui="report"] #report-information .metric-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+body[data-frozen-ui="report"] #report-information .metric-group{min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:8px}
 body[data-frozen-ui="report"] #report-information .metric-group>h4{margin:0 0 8px;font-size:12px;line-height:1.8;font-weight:400;color:var(--muted)}
 body[data-frozen-ui="report"] #report-information .metric-list{margin:0}
 body[data-frozen-ui="report"] #report-information .metric-list>.metric-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 14px;padding:6px 0;align-items:baseline}
@@ -286,15 +305,25 @@ body[data-frozen-ui="report"] #report-information .metric-list dd{margin:0;font-
 body[data-frozen-ui="report"] #report-information .metric-group-note{margin:10px 0 0;font-size:12px;line-height:1.75;color:var(--muted)}
 body[data-frozen-ui="report"] #report-information .metric-reason{grid-column:1 / -1;margin:3px 0 0;font-size:12px;line-height:1.75;color:var(--muted)}
 body[data-frozen-ui="report"] #report-information .metric-availability{margin:0 0 16px;border-left:2px solid var(--accent);padding-left:12px;font-size:13px;line-height:1.8;color:var(--muted)}
-body[data-frozen-ui="report"] #report-information .metric-source-list{display:grid;gap:10px;margin:2px 0 12px}
-body[data-frozen-ui="report"] #report-information .metric-source-list>div{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:baseline}
-body[data-frozen-ui="report"] #report-information .metric-source-list dt{font-size:12px;line-height:1.75;color:var(--muted)}
-body[data-frozen-ui="report"] #report-information .metric-source-list dd{margin:0;font-size:13px;line-height:1.75;overflow-wrap:anywhere}
+body[data-frozen-ui="report"] #report-information .metric-source-list{display:grid;gap:7px;margin:0;padding:12px 14px;background:var(--hover);border-radius:8px}
+body[data-frozen-ui="report"] #report-information .metric-source-list>div{display:grid;grid-template-columns:5.5em minmax(0,1fr);gap:12px;align-items:baseline;font-size:12px;line-height:1.7}
+body[data-frozen-ui="report"] #report-information .metric-source-list dt{font-weight:550;color:var(--ink)}
+body[data-frozen-ui="report"] #report-information .metric-source-list dd{margin:0;color:var(--muted);overflow-wrap:anywhere}
 body[data-frozen-ui="report"] #report-information #report-analysis-actions{margin:12px 0}
 body[data-frozen-ui="report"] #report-information #btn-report{border:0;background:none;padding:6px 0;min-height:36px;font-size:13px;color:var(--accent)}
-@media(max-width:800px){body[data-frozen-ui="report"] #report-information .metric-groups{grid-template-columns:minmax(0,1fr);gap:22px}body[data-frozen-ui="report"] #report-information .metric-group{max-width:440px}}
-@media(max-width:420px){body[data-frozen-ui="report"] #report-information .word-statistics{gap:8px}body[data-frozen-ui="report"] #report-information .word-statistics>.metric-item{grid-template-columns:minmax(0,1fr);gap:3px}body[data-frozen-ui="report"] #report-information .word-statistics dt{font-size:12px}body[data-frozen-ui="report"] #report-information .metric-source-list>div{grid-template-columns:minmax(0,1fr);gap:2px}}
-@media(pointer:coarse){body[data-frozen-ui="report"] #report-information #btn-report{min-height:44px}}
+@media(max-width:800px){
+  body[data-frozen-ui="report"] #report-information .metric-groups{grid-template-columns:minmax(0,1fr)}
+  body[data-frozen-ui="report"] #report-information .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:480px){
+  body[data-frozen-ui="report"] #report-information .word-statistics{gap:8px}
+  body[data-frozen-ui="report"] #report-information .word-statistics>.metric-item,
+  body[data-frozen-ui="report"] #report-information .metric-source-list>div,
+  body[data-frozen-ui="report"] #report-information .metric-word-list li{grid-template-columns:minmax(0,1fr);gap:3px}
+  body[data-frozen-ui="report"] #report-information .metric-word-category{justify-self:start}
+  body[data-frozen-ui="report"] #report-information .metric-gap-list li{grid-template-columns:minmax(0,1fr) auto auto;gap:8px}
+}
+@media(pointer:coarse){body[data-frozen-ui="report"] #report-information :is(#btn-report,.metric-evidence-list .text-action){min-height:44px}}
 body[data-frozen-ui]:not([data-frozen-ui=""]) .user-message{margin:16px auto;width:min(848px,calc(100% - 120px));border-top:1px solid #e2dfd7;border-bottom:1px solid #e2dfd7;padding:14px 0;font-size:13px;line-height:1.8;color:#817b6e}
 body[data-frozen-ui]:not([data-frozen-ui=""]) .user-message button{font-size:12px;color:#84735b;padding:8px}
 body[data-frozen-ui]:not([data-frozen-ui=""]) .modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:#4d45362b;backdrop-filter:blur(3px)}

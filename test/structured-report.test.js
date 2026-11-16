@@ -112,12 +112,13 @@ test('V2 shows saved word contexts and exact interval boundaries without exposin
     metricRun,evidenceRun,record:{fullText:'我觉得，嗯<script>',audioUrl:'blob:fixture'},onGap:gap=>clicked.push(gap)}));
   assert.deepEqual(byClass(target,'metric-item').map(node=>node.id),['metric:review-word-count','metric:between-speech-gap-count']);
   const [hits,gaps]=byClass(target,'metric-evidence-list');
-  for(const details of [hits,gaps]){details.open=true;details.listeners.toggle();}
+  assert.equal(descendants(target,node=>node.tagName==='DETAILS'||node.tagName==='SUMMARY').length,0);
   assert.equal(hits.id,'metric:filler-count');
   assert.deepEqual(descendants(hits,node=>node.tagName==='MARK').map(node=>node.textContent),['我觉得','嗯']);
   assert.match(hits.textContent,/填充词、犹豫词/);
   assert.match(hits.textContent,/<script>/);
-  assert.match(gaps.textContent,/3–3\.625 秒（0\.625 秒）/);
+  assert.match(gaps.textContent,/3–3\.625 秒/);
+  assert.match(gaps.textContent,/时长 0\.625 秒/);
   gaps.querySelector('button').click();
   assert.deepEqual(clicked,[{startSample:48000,endSample:58000}]);
 });

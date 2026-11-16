@@ -253,6 +253,13 @@ body[data-frozen-ui="report"] #report-analysis-actions .btn-icon-inner{display:n
 /* Saved report measurements share one outer disclosure. */
 body[data-frozen-ui="report"] .study-materials>.report-disclosure>summary{font-size:13px;font-weight:400}
 body[data-frozen-ui="report"] #report-information>summary{color:var(--ink)}
+body[data-frozen-ui="report"] #report-information .report-metrics :is(section>h3,.metric-evidence-list>summary){
+  font-size:13px;font-weight:400;line-height:1.8;letter-spacing:.4px;color:#84735b;
+}
+html[data-theme]:is([data-theme="coral-glow"],[data-theme="ink-night"],[data-theme="frosted-mist"])
+body[data-frozen-ui="report"] #report-information .report-metrics :is(section>h3,.metric-evidence-list>summary){color:var(--accent)}
+/* Match the disclosure accent despite the dark theme's global heading color. */
+html[data-theme="ink-night"] body[data-frozen-ui="report"] #report-information .report-metrics>section>h3{color:var(--accent)!important}
 body[data-frozen-ui="report"] #report-information .report-metrics{padding:8px 0 0;color:var(--ink)}
 body[data-frozen-ui="report"] #report-information .word-statistics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;max-width:550px;margin:0 0 10px}
 body[data-frozen-ui="report"] #report-information .word-statistics>.metric-item{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 14px;align-items:baseline}

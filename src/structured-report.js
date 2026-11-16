@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this,() => {
   'use strict';
 
-  const {selectStructuredReport,getOrderedFindings,CATEGORIES,REPORT_METRICS_VERSION,wordMatches,speechGap} = typeof module === 'object' && module.exports
+  const {selectStructuredReport,getOrderedFindings,CATEGORIES,REPORT_METRICS_VERSION,speechGap} = typeof module === 'object' && module.exports
     ? require('../shared/report-selection') : globalThis.ReportSelection;
   const REASONS = {
     'not-configured':'尚未配置 AI 服务，可在设置中添加配置后重试',
@@ -33,11 +33,17 @@
 
   const COUNT_METRICS=[['vague-word-count','笼统词','vagueWords'],['filler-count','填充词','fillers'],['hedge-count','犹豫词','hedges']];
   const BASIC_METRICS=['text-character-count','audio-duration-ms'];
+  const WORD_EVIDENCE_KINDS = new Map([
+    ['metric:filler-count',1],['metric:filler-rate-per-recorded-minute',1],
+    ['metric:hedge-count',2],['metric:hedge-character-percent',2],
+    ['metric:vague-word-count',4],['metric:non-filler-hedge-character-percent',3],['metric:review-word-count',7]
+  ]);
   function createReportMetrics(document,{metrics=[],record={},evidenceRun,metricRun,onGap}={}) {
     const node=(tag,className,text)=>{const value=document.createElement(tag);if(className)value.className=className;if(text!==undefined)value.textContent=String(text);return value;};
     const root=node('section','report-metrics'),byId=new Map(metrics.map(metric=>[metric.id,metric]));
     const revised = metricRun?.value.definitionVersion===REPORT_METRICS_VERSION;
     const rendered=new Set();
+    let gapValue;
     function formatted(metric) {
       if(metric?.status!=='available' || !Number.isFinite(metric.value))return '暂不可用';
       const value=Number(metric.value.toFixed(2));
@@ -50,63 +56,80 @@
     function row(metric,label) {
       rendered.add(metric.id);
       const item=node('div','metric-item');item.id=`metric:${metric.id}`;
-      item.append(node('dt',null,label || metric.label),node('dd',null,formatted(metric)));
+      const value=node('dd',null,formatted(metric));
+      if (metric.id==='between-speech-gap-count') gapValue=value;
+      item.append(node('dt',null,label || metric.label),value);
       if(metric.status!=='available' || !Number.isFinite(metric.value))item.appendChild(node('p','metric-reason',reasonText(metric.reason)));
       return item;
     }
-    function evidenceList(title,listClass,entries,render) {
-      const section=node('section','metric-evidence-list');
-      const list=node('ul',listClass);
-      list.setAttribute('role','list');
-      const more=node('button','text-action',`显示更多${title}`);more.type='button';
+    function addGapReplay(section) {
+      const metric=byId.get('between-speech-gap-count');
+      const evidence=evidenceRun?.value;
+      const sampleCount=evidence?.audio?.sampleCount;
+      if (!gapValue || !onGap || !record.audioUrl || ['missing','corrupt'].includes(record.audioState) ||
+          metric?.status!=='available' || !Number.isFinite(metric.value) || metric.value<=0 ||
+          evidence?.status!=='completed' || evidence.audio?.sampleRateHz!==16000 ||
+          !Number.isSafeInteger(sampleCount) || !Array.isArray(evidence.segments)) return;
+
+      function* gaps() {
+        for (let index=1;index<evidence.segments.length;index++) {
+          const gap=speechGap(evidence.segments[index-1],evidence.segments[index]);
+          if (gap && gap.startSample>=0 && gap.endSample<=sampleCount) yield gap;
+        }
+      }
+      const entries=gaps();
       let next=entries.next();
+      if (next.done) return;
+      const toggle=node('button','metric-gap-toggle text-action','回听间隔');
+      toggle.type='button';
+      toggle.id='report-gap-toggle';
+      toggle.setAttribute('aria-expanded','false');
+      toggle.setAttribute('aria-controls','report-gap-panel');
+      gapValue.appendChild(toggle);
+
+      const panel=node('div','metric-gap-panel');
+      panel.id='report-gap-panel';
+      panel.hidden=true;
+      const list=node('ul','metric-gap-list');
+      list.setAttribute('role','list');
+      list.setAttribute('aria-label','间隔明细');
+      const more=node('button','text-action','显示更多间隔');more.type='button';
+      const seconds=samples=>Number((samples/16000).toFixed(3));
       function appendPage() {
-        let firstItem;
+        let firstButton;
         for (let i=0;i<50 && !next.done;i++) {
+          const gap=next.value;
+          const {startSample,endSample}=gap;
+          const range=`${seconds(startSample)}–${seconds(endSample)} 秒`;
+          const duration=`${seconds(endSample-startSample)} 秒`;
           const item=node('li');
-          render(item,next.value);
+          const button=node('button','text-action','回放');button.type='button';
+          button.setAttribute('aria-label',`回放 ${range}（${duration}）的前后录音`);
+          button.addEventListener('click',()=>onGap(gap,button));
+          item.append(node('span','metric-gap-range',range),node('span','metric-gap-duration',`时长 ${duration}`),button);
           list.appendChild(item);
-          firstItem ??= item;
+          firstButton ??= button;
           next=entries.next();
         }
         more.hidden=next.done;
-        return firstItem;
+        return firstButton;
       }
-      appendPage();
-      more.addEventListener('click',()=>{
-        const firstItem=appendPage();
-        if (!firstItem) return;
-        firstItem.tabIndex=-1;
-        firstItem.focus();
+      toggle.addEventListener('click',()=>{
+        panel.hidden=!panel.hidden;
+        toggle.textContent=panel.hidden?'回听间隔':'收起间隔';
+        toggle.setAttribute('aria-expanded',String(!panel.hidden));
+        if (!panel.hidden && !list.children.length) appendPage();
       });
-      section.append(node('h3',null,title),list,more);
-      return section;
+      more.addEventListener('click',()=>appendPage()?.focus());
+      panel.append(list,more);
+      section.appendChild(panel);
     }
     const basics=node('dl','metric-basics');
     for(const id of BASIC_METRICS)if(byId.has(id))basics.appendChild(row(byId.get(id)));
     const reviewWords=byId.get('review-word-count');
     if(revised && reviewWords)basics.appendChild(row(reviewWords));
     root.appendChild(basics);
-    let wordEvidence;
-    if (revised) {
-      const map=metricRun.value.localStatsSnapshot?.wordMatchMap;
-      const fullText=record.fullText || (record.segments || []).map(segment=>segment.text).join('');
-      if (reviewWords?.status==='available' && reviewWords.value>0 && typeof map==='string' && map.length<=fullText.length) {
-        wordEvidence=evidenceList('用词命中','metric-word-list',wordMatches(map),(item,{start,end,kinds})=>{
-          const context=node('span','metric-word-context');
-          const before=fullText.slice(Math.max(0,start-14),start),after=fullText.slice(end,end+14);
-          const labels=['填充词','犹豫词','笼统词'].filter((_,index)=>kinds & (1<<index));
-          context.append(node('span',null,(start>14?'…':'')+before),node('mark',null,fullText.slice(start,end)),
-            node('span',null,after+(end+14<fullText.length?'…':'')));
-          item.append(context,node('small','metric-word-category',labels.join('、')));
-        });
-      } else {
-        wordEvidence=node('section','metric-evidence-list');
-        wordEvidence.append(node('h3',null,'用词命中'),node('p','metric-count-note',reviewWords?.status==='available'
-          ? '本次没有待核查的词表命中。' : reasonText(reviewWords?.reason)));
-      }
-      wordEvidence.id='metric:filler-count';
-    } else {
+    if (!revised) {
       const counts=node('dl','word-statistics');counts.setAttribute('aria-label','词语命中次数');
       for(const [id,label,key] of COUNT_METRICS){
         const saved=record.metricsAvailable!==false && Number.isFinite(record.stats?.[key]) ? record.stats[key] : null;
@@ -146,34 +169,8 @@
       more.hidden=!groups.children.length;
       more.appendChild(groups);
     }
+    addGapReplay(more);
     root.appendChild(more);
-    if (wordEvidence) root.appendChild(wordEvidence);
-    const speechSegments=evidenceRun?.value.segments || [];
-    const gapCount=byId.get('between-speech-gap-count');
-    if (revised && gapCount?.status==='available' && gapCount.value>0 && evidenceRun?.value.status==='completed') {
-      function* gaps() {
-        for(let index=1;index<speechSegments.length;index++) {
-          const gap=speechGap(speechSegments[index-1],speechSegments[index]);
-          if(gap)yield gap;
-        }
-      }
-      const canPlay=Boolean(onGap && record.audioUrl && !['missing','corrupt'].includes(record.audioState));
-      const seconds=samples=>(samples/16000).toFixed(3).replace(/\.?0+$/,'');
-      const gapEvidence=evidenceList('内部间隔','metric-gap-list',gaps(),(item,gap)=>{
-        const {startSample,endSample}=gap;
-        const range=`${seconds(startSample)}–${seconds(endSample)} 秒`;
-        const duration=`${seconds(endSample-startSample)} 秒`;
-        item.append(node('span','metric-gap-range',range),node('span','metric-gap-duration',`时长 ${duration}`));
-        if (canPlay) {
-          const button=node('button','text-action','回放');button.type='button';
-          button.setAttribute('aria-label',`回放 ${range}（${duration}）的前后录音`);
-          button.addEventListener('click',()=>onGap(gap));
-          item.appendChild(button);
-        }
-      });
-      root.appendChild(gapEvidence);
-      if (!canPlay) gapEvidence.appendChild(node('p','metric-count-note','录音暂不可回放。'));
-    }
     const source=node('section','metric-source-details');source.id='report-metric-source';source.appendChild(node('h3',null,'分析说明'));
     const explanations=node('dl','metric-source-list');
     const asr=record.sourceSnapshot?.asr;
@@ -247,23 +244,26 @@
       const evidence = element('div','finding-evidence');
       for (const ref of finding.evidenceRefs) {
         const metric = ref.startsWith('metric:') ? metricById.get(ref.slice(7)) : null;
+        const wordEvidence = WORD_EVIDENCE_KINDS.has(ref);
         const speech = speechById.get(ref);
         const transcript = segmentById.get(ref);
-        const button = element('button','evidence-button',metric ? `查看指标：${metric.label}`
+        const button = element('button','evidence-button',wordEvidence ? '查看原文' : metric ? `查看指标：${metric.label}`
           : speech ? '查看语音区间' : '定位到录音');
         button.type = 'button';
         button.setAttribute('data-evidence-ref',ref);
+        if (wordEvidence && metric) button.setAttribute('aria-label',`查看原文 · ${metric.label}`);
         button.addEventListener('click',() => {
           if (typeof onEvidence === 'function') onEvidence(ref);
         });
         const block=element('div','evidence-block');
         const seconds=Number.isFinite(transcript?.startMs)?Math.floor(transcript.startMs/1000):null;
         const header=element('div','evidence-header');
-        header.append(element('span',null,transcript ? `你的原话${seconds===null?'':` · ${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`}` : metric?'本地指标证据':'语音活动证据'),button);
+        header.append(element('span',null,transcript ? `你的原话${seconds===null?'':` · ${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`}`
+          : wordEvidence ? metric?.label || '用词证据' : metric ? '本地指标证据' : '语音活动证据'),button);
         block.appendChild(header);
         if (transcript) block.appendChild(element('blockquote','evidence-quote',transcript.text));
         if (metricRun.value.definitionVersion===REPORT_METRICS_VERSION && metric?.id==='filler-count' && metric.status==='available') {
-          block.appendChild(element('p',null,`本条诊断引用了 ${metric.value} 次填充词命中。可展开原文核对“填充词”标记。`));
+          block.appendChild(element('p',null,`本条诊断引用了 ${metric.value} 次填充词命中。`));
         }
         if (speech) {
           block.appendChild(element('p','speech-interval',
@@ -311,5 +311,5 @@
     return dispose;
   }
 
-  return {selectStructuredReport,renderStructuredReport,createReportMetrics};
+  return {selectStructuredReport,renderStructuredReport,createReportMetrics,WORD_EVIDENCE_KINDS};
 });

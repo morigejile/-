@@ -53,7 +53,12 @@ test('custom playback uses media events and real media properties for play, seek
 test('media missing, decoding errors and play rejection never imitate a usable recording',async()=>{
   const f=fixture();f.record.audioUrl=null;f.record.audioState='missing';f.view.setRecord(f.record);assert(f.nodes.get('playback-player').hidden);assert.match(f.nodes.get('playback-audio-status').textContent,/缺失/);
   f.record.audioUrl='blob:new';f.record.audioState='available';f.view.setRecord(f.record);f.audio.play=()=>Promise.reject(Error('decode'));f.nodes.get('playback-toggle').dispatch('click');await Promise.resolve();await Promise.resolve();assert.match(f.nodes.get('playback-audio-status').textContent,/播放失败/);
+  const gapToggle=new Element(f.document,'button'),gapPanel=new Element(f.document);
+  gapToggle.setAttribute('aria-expanded','true');
+  f.nodes.set('report-gap-toggle',gapToggle);f.nodes.set('report-gap-panel',gapPanel);
   f.audio.error={code:3};f.audio.dispatch('error');assert(f.nodes.get('playback-player').hidden);assert.match(f.nodes.get('playback-audio-status').textContent,/损坏|无法加载/);
+  assert.equal(gapToggle.hidden,true);assert.equal(gapPanel.hidden,true);
+  assert.equal(gapToggle.getAttribute('aria-expanded'),'false');
 });
 test('audio-only records remain playable and missing segments do not invent transcript rows',()=>{
   const f=fixture({withoutFeedback:true});f.record.segments=[];f.record.fullText='';f.view.setRecord(f.record);

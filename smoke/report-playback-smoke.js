@@ -14,13 +14,14 @@ async function run({mainWindow,evaluate,wait,click,capture}){
     wav.setUint32(28,32000,true);wav.setUint16(32,2,true);wav.setUint16(34,16,true);ascii(36,'data');wav.setUint32(40,buffer.byteLength-44,true);
     const url=URL.createObjectURL(new Blob([buffer],{type:'audio/wav'}));
     window.__playbackSmoke={record,original:{audioUrl:record.audioUrl,segments:record.segments,fullText:record.fullText,
-      durationMs:record.durationMs,structuredReport:record.structuredReport},url,theme:document.documentElement.dataset.theme};
+      audioState:record.audioState,durationMs:record.durationMs,structuredReport:record.structuredReport},url,theme:document.documentElement.dataset.theme};
     record.audioUrl=url;record.durationMs=120000;
     record.segments=Array.from({length:48},(_,i)=>({id:'playback-smoke-'+i,startMs:i*2000,endMs:(i+1)*2000,timingSource:'estimated',text:'这是第 '+(i+1)+' 段合成转写，用于核对紧凑排版、播放定位和长文阅读，不用于表达质量评估。'}));
-    record.segments[0].text='嗯，我觉得这个计划很好。然后可以先试行两周。';
+    record.segments[0].text='嗯，然后可以先试行两周。';
+    record.segments[1].text='我觉得这个计划很好。';
     record.fullText=record.segments.map(segment=>segment.text).join('');
     const report=record.structuredReport;
-    const tokens=new Array(record.segments[0].text.length).fill(' ');
+    const tokens=new Array(record.segments[0].text.length+record.segments[1].text.length).fill(' ');
     for(const [word,kinds] of [['嗯','1'],['我觉得','2'],['很好','4'],['然后','1']]){
       const start=record.fullText.indexOf(word);
       tokens.splice(start,word.length,kinds,...Array(word.length-1).fill('-'));
@@ -29,40 +30,79 @@ async function run({mainWindow,evaluate,wait,click,capture}){
     const detailValues={'hedge-character-percent':3.57,'speech-duration-ms':19000,'text-rate-per-speech-minute':265.26,
       'between-speech-gap-count':1,'between-speech-gap-percent':9.52,'between-speech-gap-rate-per-expression-minute':2.86,'review-word-count':4};
     record.structuredReport={...report,
+      analysisRun:{...report.analysisRun,status:'completed',value:{summary:'本次报告的用词证据。',findings:[
+        {id:'word-evidence-smoke',category:'wording',observation:'核对用词证据',recommendation:'结合原文判断',
+          evidenceRefs:['metric:filler-count','metric:hedge-character-percent']}
+      ]}},
       evidenceRun:{...report.evidenceRun,value:{...report.evidenceRun.value,audio:{sampleRateHz:16000,sampleCount:1920000},
         segments:[{id:'speech-0',startSample:16000,endSample:48000},{id:'speech-1',startSample:80000,endSample:352000}]}},
       metricRun:{...report.metricRun,value:{...report.metricRun.value,localStatsSnapshot:{wordMatchMap},
         metrics:report.metricRun.value.metrics.map(item=>({...item,value:detailValues[item.id] ?? item.value}))}}};
     trainer.refreshPlaybackControls();trainer.renderCurrentReport(record);
     document.getElementById('report-information').open=false;
-    document.getElementById('report-materials').open=true;
+    document.getElementById('report-materials').open=false;
   })()`);
   try{
     await wait('synthetic WAV metadata and seek controls ready',`document.getElementById('recording-player').duration===120 && !document.getElementById('playback-forward').disabled`);
-    const gapButton='button[aria-label^="回放 3"]';
-    assert.equal(await evaluate(`document.querySelector(${JSON.stringify(gapButton)})?.checkVisibility()`),false);
-    await evaluate(`window.__trainingProductTrainer.focusReportEvidence(window.__playbackSmoke.record,'metric:filler-count')`);
-    assert.equal(await evaluate(`document.querySelector(${JSON.stringify(gapButton)})?.checkVisibility()`),true,
-      'the interval and its replay action are visible after opening only the outer disclosure');
-    const hits=['嗯','我觉得','很好','然后'];
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('.metric-word-list mark')].filter(node=>node.checkVisibility()).map(node=>node.textContent)`),hits);
+    const gapButton='#report-gap-panel li button';
+    const hits=['嗯','然后','我觉得','很好'];
+    await evaluate(`document.querySelector('.finding-details').open=true`);
+    for(const [metricId,segment] of [['filler-count','playback-smoke-0'],['hedge-character-percent','playback-smoke-1']]){
+      const selector=JSON.stringify(`[data-evidence-ref="metric:${metricId}"]`);
+      assert.equal(await evaluate(`document.querySelector(${selector}).textContent`),'查看原文');
+      await evaluate(`document.querySelector(${selector}).click()`);
+      assert.deepEqual(await evaluate(`({open:document.getElementById('report-materials').open,
+        focused:document.activeElement.closest('.playback-segment')?.dataset.segmentId,
+        paused:document.getElementById('recording-player').paused})`),{open:true,focused:segment,paused:true});
+    }
+    assert.equal(await evaluate(`document.querySelector('.metric-word-list')`),null);
     assert.deepEqual(await evaluate(`[...document.querySelectorAll('.playback-segment-text mark')].map(node=>node.textContent)`),hits,
-      'the transcript marks the same saved hits as the report, including the whole 我觉得 and no unsaved substring hits');
-    assert.equal(await evaluate(`document.querySelector('.playback-segment-text').textContent`), '嗯，我觉得这个计划很好。然后可以先试行两周。');
-    assert.deepEqual(await evaluate(`(()=>{
+      'the transcript marks saved hits without adding unsaved substring hits');
+    for(const legacy of [false,true]){
+      assert.deepEqual(await evaluate(`(()=>{
       const {record}=window.__playbackSmoke,trainer=window.__trainingProductTrainer,report=record.structuredReport;
-      const materials=document.getElementById('playback-segments');
-      record.structuredReport=null;
+      record.structuredReport={...report,metricRun:{...report.metricRun,value:{...report.metricRun.value,
+        definitionVersion:${legacy}?'common-metrics-v1':report.metricRun.value.definitionVersion,localStatsSnapshot:null}}};
       trainer.renderCurrentReport(record);
-      const legacy={hits:materials.querySelectorAll('mark').length,text:materials.querySelector('.playback-segment-text').textContent};
+      document.getElementById('report-materials').open=false;
+      document.querySelector('[data-evidence-ref="metric:filler-count"]').click();
+      const state={hits:document.querySelectorAll('#playback-segments mark').length,
+        open:document.getElementById('report-materials').open,focus:document.activeElement.id,
+        text:document.querySelector('.playback-segment-text').textContent};
       record.structuredReport=report;
       trainer.renderCurrentReport(record);
-      return {legacy,restored:[...materials.querySelectorAll('mark')].map(node=>node.textContent)};
-    })()`),{legacy:{hits:0,text:'嗯，我觉得这个计划很好。然后可以先试行两周。'},restored:hits});
+      return state;
+      })()`),{hits:0,open:true,focus:'report-materials-heading',text:'嗯，然后可以先试行两周。'});
+    }
+    for(const variant of ['zero','missing']){
+      assert.deepEqual(await evaluate(`(()=>{
+        const {record}=window.__playbackSmoke,trainer=window.__trainingProductTrainer,report=record.structuredReport;
+        const previous=record.audioState;
+        const zero=${variant==='zero'};
+        if(zero)record.structuredReport={...report,metricRun:{...report.metricRun,value:{...report.metricRun.value,
+          metrics:report.metricRun.value.metrics.map(metric=>metric.id==='between-speech-gap-count'?{...metric,value:0}:metric)}}};
+        else record.audioState='missing';
+        trainer.renderCurrentReport(record);
+        const state={entry:!!document.getElementById('report-gap-toggle'),
+          count:document.getElementById('metric:between-speech-gap-count').querySelector('dd').textContent};
+        record.structuredReport=report;
+        record.audioState=previous;
+        trainer.renderCurrentReport(record);
+        return state;
+      })()`),{entry:false,count:variant==='zero'?'0 次':'1 次'});
+    }
+    await evaluate(`document.getElementById('report-information').open=true;document.getElementById('report-materials').open=false`);
+    assert.equal(await evaluate(`document.querySelector('#report-gap-panel').hidden && !document.querySelector('${gapButton}')`),true);
+    await evaluate(`document.getElementById('report-gap-toggle').click()`);
+    assert.equal(await evaluate(`document.querySelector('${gapButton}').checkVisibility()`),true);
     assert.equal(await evaluate(`document.querySelector(${JSON.stringify(gapButton)}).getAttribute('aria-label')`),'回放 3–5 秒（2 秒）的前后录音');
     await evaluate(`document.querySelector(${JSON.stringify(gapButton)}).click()`);
     await wait('gap playback starts before the selected interval',`(()=>{const audio=document.getElementById('recording-player');return !audio.paused&&audio.currentTime>=2&&audio.currentTime<3;})()`);
+    assert.equal(await evaluate(`document.querySelector('${gapButton}').textContent`),'暂停');
     await wait('gap playback stops with trailing context',`(()=>{const audio=document.getElementById('recording-player');return audio.paused&&audio.currentTime>=6&&audio.currentTime<6.8;})()`);
+    assert.equal(await evaluate(`document.querySelector('${gapButton}').textContent`),'回放');
+    await evaluate(`document.getElementById('report-gap-toggle').click()`);
+    assert.equal(await evaluate(`document.querySelector('#report-gap-panel').hidden`),true);
     await evaluate(`document.getElementById('recording-player').currentTime=0;
       document.getElementById('report-materials').scrollIntoView({block:'start',behavior:'instant'})`);
     await wait('transport is visible after returning from interval evidence',`(()=>{
@@ -122,7 +162,7 @@ async function run({mainWindow,evaluate,wait,click,capture}){
             surface:getComputedStyle(toolbar).backgroundColor,headerSurface:getComputedStyle(heading).backgroundColor,
             currentShadow:getComputedStyle(document.querySelector('.playback-segment.is-current button')).boxShadow,
             ordinaryColor:getComputedStyle(text).color,ordinaryWeight:Number(getComputedStyle(text).fontWeight),
-            hits:[...text.querySelectorAll('mark')].map(node=>({color:getComputedStyle(node).color,weight:Number(getComputedStyle(node).fontWeight)})),
+            hits:[...document.querySelectorAll('#playback-segments mark')].map(node=>({color:getComputedStyle(node).color,weight:Number(getComputedStyle(node).fontWeight)})),
             metricStylesMatch:[...document.querySelectorAll('.metric-grid>.metric-item')].every(item=>{
               const sameTextStyle=(node,reference)=>['fontSize','fontWeight','lineHeight','letterSpacing','color'].every(key=>
                 getComputedStyle(node)[key]===getComputedStyle(reference)[key]);

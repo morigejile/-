@@ -448,7 +448,7 @@ npm run smoke:package
 
 2026-11-10 用户完成独立本地验收页面中的直接核对，标注版本为 revision 134；来源绑定、原 Report/Source ID、间隔列表和 WAV hash 已重新核验，原标注冻结在本机 Git 忽略的实验目录。A 的 8 处均确认存在，其中 3 处自然、5 处影响连贯；B 的 23 处均确认存在，其中 7 处自然、16 处影响连贯；合计 31 处全部填写，无待定。A 的整体听感为“经常中断、语速适中”，B 未填写整体听感，不补推断。B 中两处同为约 0.538 秒的间隔分别标为自然与影响连贯，不能把检测间隔次数等同卡顿次数，也不能仅按时长判问题。本轮是对已展示候选的存在性与听感影响复核，未填写边界标签或独立漏检标记，不外推召回率、毫秒边界精度、跨场景准确率、自动流畅度阈值或 AI 报告质量。现有参数与未校准 provenance 保留；没有基于本批结果立即系统调参，也没有接入生产诊断。
 
-新版报告保存 `common-metrics-v2`，展示九项观测、命中词的原文上下文和内部间隔回放。History、Comparison 和只读核验工具读取各自保存的 V1/V2 定义。新版 VAD 仍使用已保存 Source 的边界和来源，主诊断继续使用原三项指标名单。定义见 [Data Model §5.3](data-model.md#正式报告-v2)，交互见 [Training Flow §7.2](../product/training-flow.md#72-report-workspace-信息结构)。
+新版报告保存 `common-metrics-v2`，展示九项观测。用词证据指向保存的原文片段，内部间隔从次数指标按需回听。History、Comparison 和只读核验工具读取各自保存的 V1/V2 定义。新版 VAD 仍使用已保存 Source 的边界和来源，主诊断继续使用原三项指标名单。定义见 [Data Model §5.3](data-model.md#正式报告-v2)，交互见 [Training Flow §7.2](../product/training-flow.md#72-report-workspace-信息结构)。
 
 本次 Closeout 归档此前未提交的统计输入快照修复、取消/保存刷新修复、HTTP/异常测试及只读 VAD 核验工具，并落盘最终验收决定；本轮未新增实现。M2 正式关闭，人工证据和各项边界只在 [M2 验收矩阵](../milestones/m2-speech-evidence-and-ai-diagnosis.md#acceptance-criteria) 定义。SenseVoice 下载异常与真实 smoke/资源验收（B-23）明确延期；Report UX（B-22）、雷达完整校准（B-20）和扩大 VAD 校准（B-24）为非阻塞后续项，重开条件只见 [Backlog](../product/backlog.md#not-now)。雷达及 VAD 来源的未校准标记保持不变。
 

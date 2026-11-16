@@ -99,7 +99,7 @@ function descendants(node,predicate) {
 function byClass(node,name) {return descendants(node,child=>child.className.split(' ').includes(name));}
 function container() {return new Document().createElement('div');}
 
-test('V2 shows saved word contexts and exact interval boundaries without exposing internal statistics as rows',()=>{
+test('V2 keeps exact interval boundaries behind the count action and omits the standalone word list',()=>{
   const source=runs(), [evidenceRun,metricRun]=source;
   const metric=(id,value,unit)=>({id,label:id,value,unit,status:'available'});
   Object.assign(metricRun.value,{definitionVersion:'common-metrics-v2',localStatsSnapshot:{wordMatchMap:'3-- 1'},
@@ -111,16 +111,41 @@ test('V2 shows saved word contexts and exact interval boundaries without exposin
   target.appendChild(api().createReportMetrics(target.ownerDocument,{metrics:metricRun.value.metrics,
     metricRun,evidenceRun,record:{fullText:'我觉得，嗯<script>',audioUrl:'blob:fixture'},onGap:gap=>clicked.push(gap)}));
   assert.deepEqual(byClass(target,'metric-item').map(node=>node.id),['metric:review-word-count','metric:between-speech-gap-count']);
-  const [hits,gaps]=byClass(target,'metric-evidence-list');
-  assert.equal(descendants(target,node=>node.tagName==='DETAILS'||node.tagName==='SUMMARY').length,0);
-  assert.equal(hits.id,'metric:filler-count');
-  assert.deepEqual(descendants(hits,node=>node.tagName==='MARK').map(node=>node.textContent),['我觉得','嗯']);
-  assert.match(hits.textContent,/填充词、犹豫词/);
-  assert.match(hits.textContent,/<script>/);
+  assert.equal(descendants(target,node=>node.id==='metric:filler-count').length,0);
+  const [gaps]=byClass(target,'metric-gap-panel');
+  const [toggle]=byClass(target,'metric-gap-toggle');
+  assert.equal(gaps.hidden,true);
+  assert.equal(gaps.querySelector('li'),null);
+  assert.equal(byClass(target,'metric-item')[1].querySelector('button'),toggle);
+  toggle.click();
+  assert.equal(gaps.hidden,false);
   assert.match(gaps.textContent,/3–3\.625 秒/);
   assert.match(gaps.textContent,/时长 0\.625 秒/);
   gaps.querySelector('button').click();
   assert.deepEqual(clicked,[{startSample:48000,endSample:58000}]);
+  toggle.click();
+  assert.equal(gaps.hidden,true);
+});
+
+test('historical interval counts stay visible when their saved boundaries or recording cannot be replayed',()=>{
+  const [evidenceRun,metricRun]=runs();
+  const count={id:'between-speech-gap-count',label:'区间间隔',status:'available',value:1,unit:'occurrences'};
+  metricRun.value.metrics.push(count);
+  const available={audioUrl:'blob:fixture',audioState:'available'};
+  const target=container();
+  const render=(record=available)=>{
+    target.replaceChildren(api().createReportMetrics(target.ownerDocument,{
+      metrics:metricRun.value.metrics,metricRun,evidenceRun,record,onGap:()=>{}
+    }));
+    assert.match(descendants(target,node=>node.id==='metric:between-speech-gap-count')[0].textContent,/1 次/);
+  };
+  render();
+  assert.equal(byClass(target,'metric-gap-toggle').length,0,'a saved count alone supplies no playback boundary');
+  evidenceRun.value.segments.push({id:'speech-1',startSample:58000,endSample:74000});
+  render();
+  assert.equal(byClass(target,'metric-gap-toggle').length,1,'a historical report can replay an interval with saved boundaries');
+  render({...available,audioState:'corrupt'});
+  assert.equal(byClass(target,'metric-gap-toggle').length,0);
 });
 
 test('compact metrics retain saved values, all evidence anchors and optional explanations without duplicating counts',()=>{

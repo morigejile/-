@@ -1332,7 +1332,7 @@ class ExpressionTrainer {
     if (record.structuredReport) {
       this.reportCleanup = StructuredReport.renderStructuredReport(this.reportBody,record.structuredReport,{segments:record.segments,record,api:window.api,
         onEvidence:ref => this.focusReportEvidence(record,ref),
-        onGap:gap => this.playReportGap(record,gap),
+        onGap:(gap,button) => this.playReportGap(record,gap,button),
         onPractice:(finding,scope,continueChain = false) => {
           const practiceRequest = {sessionId:record.id,reportId:record.structuredReport.snapshot.id,
             findingId:continueChain ? null : finding.id,scope,continueChain};
@@ -1353,12 +1353,24 @@ class ExpressionTrainer {
     }
     if (record.reportPending) this.reportAiStatus.textContent='正在分析这一次…';
     else if (record.analysisError) this.reportAiStatus.textContent=record.analysisError;
-    if (this.currentScreen==='report') FrozenReport.present(document,record);
+    if (this.currentScreen==='report') {
+      FrozenReport.present(document,record);
+      this.reportPlayback?.syncMedia();
+    }
     for (const node of this.reportBody.querySelectorAll?.('details[data-finding-id]') || []) if (expanded.includes(node.getAttribute('data-finding-id'))) node.open=true;
     if(preserved)this.restorePracticeReportView(record,preserved);
   }
 
   focusReportEvidence(record,ref) {
+    const wordKinds=StructuredReport.WORD_EVIDENCE_KINDS.get(ref);
+    if (wordKinds) {
+      if(this.reportPlayback) this.reportPlayback.focusWordEvidence(wordKinds);
+      else {
+        const materials=document.getElementById('report-materials');
+        if(materials) materials.open=true;
+      }
+      return;
+    }
     if (this.flowView) {
       const disclosure = document.getElementById(ref.startsWith('metric:') ? 'report-information' : 'report-materials');
       if (disclosure) disclosure.open = true;
@@ -1379,15 +1391,20 @@ class ExpressionTrainer {
     if (segment) this.reportAiStatus.textContent=`原文证据：${segment.text}${segment.timingSource==='estimated'?'（播放位置为估计）':''}`;
   }
 
-  playReportGap(record,{startSample,endSample}) {
+  playReportGap(record,{startSample,endSample},button) {
     if (this.currentScreen!=='report' || this.viewingTrainingRecordId!==record.id) return;
     this.playbackSeekGeneration=(this.playbackSeekGeneration || 0)+1;
     const source=record.structuredReport.evidenceRun.value;
     const start=Math.max(0,startSample/16000-1);
     const end=Math.min(source.audio.sampleCount/16000,endSample/16000+1);
     const materials=document.getElementById('report-materials');
-    if(materials)materials.open=true;
-    if(!this.reportPlayback?.playRange(start,end))this.showUserMessage('这段录音暂不可回放');
+    if(materials && !materials.open){
+      const region=document.getElementById('report-scroll');
+      const buttonTop=button.getBoundingClientRect().top;
+      materials.open=true;
+      region.scrollTop+=button.getBoundingClientRect().top-buttonTop;
+    }
+    if(!this.reportPlayback?.playRange(start,end,button))this.showUserMessage('这段录音暂不可回放');
   }
 
   generateReport() { return this.closing ? Promise.resolve(false) : this.trackAnalysis(() => this.generateReportForRecord()); }

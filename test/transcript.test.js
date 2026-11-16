@@ -317,10 +317,10 @@ test('failed durable creation after countdown restores editable Preparing and re
 
 test('report evidence opens the containing disclosure before focusing a saved metric or audio', () => {
   const trainer = createTrainer();
-  const metric = document.getElementById('metric:filler-count');
+  const metric = document.getElementById('metric:text-character-count');
   trainer.flowView = {};
   const record = {segments:[{id:'segment-1',startMs:1200,text:'实际片段'}],audioUrl:'saved.wav'};
-  trainer.focusReportEvidence(record,'metric:filler-count');
+  trainer.focusReportEvidence(record,'metric:text-character-count');
   assert.equal(document.getElementById('report-information').open,true);
   assert.ok(metric.scrollIntoViewOptions);
   trainer.focusReportEvidence(record,'segment-1');

@@ -13,9 +13,10 @@
       volume=get('playback-volume'),mute=get('playback-mute'),speed=get('playback-speed'),audioStatus=get('playback-audio-status'),
       transcript=get('playback-segments'),backward=get('playback-backward'),forward=get('playback-forward'),
       followControls=get('playback-follow-controls'),followSwitch=get('playback-follow'),returnButton=get('playback-return'),
-      scrollRegion=get('report-scroll'),materials=get('report-materials');
+      scrollRegion=get('report-scroll'),materials=get('report-materials'),materialsHeading=get('report-materials-heading'),
+      wordStatus=get('report-word-evidence-status');
     let record=null,recordKey=null,segments=null,fullText='',matchMap=null,selectedId=null,currentId=null,playError='',lastVolume=1,scrubbing=false,following=true;
-    let rangeEnd=null,playRequest=0;
+    let rangeEnd=null,rangeControl=null,playRequest=0,evidenceTarget=null;
     const rows=new Map(),available=()=>Boolean(record?.audioUrl&&!['missing','corrupt'].includes(record.audioState));
     audio.controls=false;audio.hidden=true;
     const node=(tag,className,text)=>{const el=document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;};
@@ -33,9 +34,12 @@
     }
     function revealCurrent(force=false){
       if(!following||(!force&&(audio.paused||rangeEnd!==null))||!available()||audio.error||!materials?.open||!scrollRegion?.clientHeight||document.body?.dataset?.frozenUi!=='report')return;
-      const row=rows.get(currentId)?.button;if(!row)return;
+      const row=rows.get(currentId)?.button;
+      if(row) revealRow(row);
+    }
+    function revealRow(row){
       const viewport=scrollRegion.getBoundingClientRect(),bounds=row.getBoundingClientRect();
-      const heading=get('report-materials-heading')?.getBoundingClientRect().height||0,toolbar=get('report-audio')?.getBoundingClientRect().height||0;
+      const heading=materialsHeading?.getBoundingClientRect().height||0,toolbar=get('report-audio')?.getBoundingClientRect().height||0;
       const visibleTop=viewport.top+heading+toolbar+12;
       if(bounds.top>=visibleTop&&bounds.bottom<=viewport.bottom-12)return;
       const reduced=document.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -57,6 +61,15 @@
     }
     function syncMedia(){
       const usable=available()&&!audio.error,total=Number.isFinite(audio.duration)&&audio.duration>0?audio.duration:0,time=Number.isFinite(audio.currentTime)?audio.currentTime:0;
+      const gapToggle=get('report-gap-toggle');
+      if(gapToggle){
+        gapToggle.hidden=!usable;
+        if(!usable){
+          get('report-gap-panel').hidden=true;
+          gapToggle.textContent='回听间隔';
+          gapToggle.setAttribute('aria-expanded','false');
+        }
+      }
       player.hidden=!usable;toggle.disabled=!usable;toggle.setAttribute('aria-label',!audio.paused?'暂停回放':audio.ended?'重新播放录音':'播放录音');
       toggle.setAttribute('aria-pressed',String(!audio.paused));toggle.dataset.playing=String(!audio.paused);
       current.textContent=clock(time);duration.textContent=total?clock(total):'—';seek.disabled=!usable||!total;seek.max=String(total||1);if(!scrubbing)seek.value=String(Math.min(time,total||0));
@@ -66,7 +79,14 @@
       audioStatus.textContent=!available()?(record?.audioState==='corrupt'?'录音已损坏，无法回放。':'录音缺失，无法回放。'):audio.error?'录音无法加载或已损坏，无法回放。':playError||(audio.readyState===0?'录音加载中…':'');
       updateRows();syncFollow();clipTranscript();
     }
-    function clearRange() { rangeEnd=null; }
+    function clearRange() {
+      rangeEnd=null;
+      if(rangeControl){
+        rangeControl.textContent='回放';
+        rangeControl.setAttribute('aria-label',rangeControl.getAttribute('aria-label').replace(/^暂停/, ''));
+        rangeControl=null;
+      }
+    }
     function play() {
       const key=recordKey;
       const request=++playRequest;
@@ -80,12 +100,23 @@
       try { audio.play()?.catch(failed); }
       catch { failed(); }
     }
-    function playRange(start,end) {
+    function playRange(start,end,control) {
       if (!available() || audio.error || !Number.isFinite(start) || !Number.isFinite(end) || start<0) return false;
       const limit=Number.isFinite(audio.duration)?Math.min(audio.duration,end):end;
       if (start>=limit) return false;
+      if(control && control===rangeControl && !audio.paused){
+        clearRange();
+        audio.pause();
+        return true;
+      }
+      clearRange();
       audio.currentTime=start;
       rangeEnd=limit;
+      if(control){
+        rangeControl=control;
+        control.textContent='暂停';
+        control.setAttribute('aria-label',`暂停${control.getAttribute('aria-label')}`);
+      }
       play();
       return true;
     }
@@ -126,12 +157,32 @@
       syncMedia();
     });
     for(const event of ['loadedmetadata','durationchange','seeked','play','pause','ended','volumechange','ratechange','emptied'])audio.addEventListener(event,syncMedia);
+    audio.addEventListener('pause',()=>{if(audio.paused) clearRange();});
     audio.addEventListener('ended',clearRange);
     audio.addEventListener('error',()=>{clearRange();syncMedia();});
     audio.addEventListener('waiting',()=>{playError='录音加载中…';syncMedia();});
     audio.addEventListener('canplay',()=>{playError='';syncMedia();});
     audio.addEventListener('play',()=>revealCurrent());
     function selectSegment(id){if(!rows.has(id))return false;selectedId=id;updateRows();return true;}
+    function focusWordEvidence(kinds) {
+      materials.open=true;
+      const match=[...rows.entries()].find(([,row])=>row.wordKinds & kinds);
+      evidenceTarget?.classList.toggle('is-evidence-target',false);
+      evidenceTarget=match?.[1].button || null;
+      if(wordStatus) wordStatus.textContent=match?'':'这份报告没有可定位的命中位置，可查看完整原文。';
+      if(!audio.paused && rangeEnd===null) setFollowing(false);
+      if(match){
+        selectSegment(match[0]);
+        evidenceTarget.classList.toggle('is-evidence-target',true);
+        evidenceTarget.focus({preventScroll:true});
+        revealRow(evidenceTarget);
+      }else{
+        materialsHeading.focus({preventScroll:true});
+        // Scroll to the section rather than measuring its sticky summary.
+        const top=scrollRegion.scrollTop+materials.getBoundingClientRect().top-scrollRegion.getBoundingClientRect().top;
+        scrollRegion.scrollTo({top:Math.max(0,top)});
+      }
+    }
     function setCurrentSegment(id){currentId=id;if(rows.has(id))selectedId=id;updateRows();syncFollow();revealCurrent();}
     function setRecord(next){
       const key=`${next?.id||''}:${next?.audioUrl||''}`,changed=key!==recordKey;
@@ -144,23 +195,31 @@
       const rebuild=changed||segments!==next?.segments||fullText!==nextText||matchMap!==nextMap;record=next;
       if(rebuild){
         segments=next?.segments;fullText=nextText;matchMap=nextMap;rows.clear();transcript.replaceChildren();
+        evidenceTarget=null;
+        if(wordStatus)wordStatus.textContent='';
         // Offsets refer to the full transcript, so only project them onto slices of that exact text.
         const aligned=!segments?.length||segments.map(segment=>segment.text).join('')===fullText;
         const matches=wordMatches(aligned ? matchMap??'' : '');
         let hit=matches.next().value,offset=0;
         function renderSlice(node,text){
           const end=offset+text.length,local=[];
+          let wordKinds=0;
           while(hit && hit.start<end){
-            if(hit.end>offset)local.push({start:Math.max(hit.start-offset,0),end:Math.min(hit.end,end)-offset,kinds:hit.kinds});
+            if(hit.end>offset){
+              local.push({start:Math.max(hit.start-offset,0),end:Math.min(hit.end,end)-offset,kinds:hit.kinds});
+              wordKinds|=hit.kinds;
+            }
             if(hit.end>end)break;
             hit=matches.next().value;
           }
           renderText(node,text,local);
           offset=end;
+          return wordKinds;
         }
         for(const segment of segments||[]){
           const root=node('div','playback-segment'),button=node('button','playback-segment-button'),time=node('span','playback-segment-time',clock(Number.isFinite(segment.startMs)?segment.startMs/1000:NaN)),text=node('span','playback-segment-text'),position=node('span','playback-position');
-          root.dataset.segmentId=segment.id;button.type='button';button.setAttribute('aria-label',`查看${Number.isFinite(segment.startMs)?clock(segment.startMs/1000)+'开始的':''}片段`);renderSlice(text,segment.text||'');button.append(time,text,position);root.append(button);transcript.append(root);rows.set(segment.id,{root,button,position});
+          const wordKinds=renderSlice(text,segment.text||'');
+          root.dataset.segmentId=segment.id;button.type='button';button.setAttribute('aria-label',`查看${Number.isFinite(segment.startMs)?clock(segment.startMs/1000)+'开始的':''}片段`);button.append(time,text,position);root.append(button);transcript.append(root);rows.set(segment.id,{root,button,position,wordKinds});
           button.addEventListener('click',()=>{selectSegment(segment.id);onSelect?.(segment.id);});
         }
         if(!rows.size&&fullText){
@@ -171,7 +230,7 @@
       }
       syncMedia();updateRows();
     }
-    return {setRecord,setCurrentSegment,selectSegment,syncMedia,playRange,clearRange};
+    return {setRecord,setCurrentSegment,selectSegment,focusWordEvidence,syncMedia,playRange,clearRange};
   }
   return {createReportPlayback,clock};
 });
